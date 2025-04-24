@@ -3,7 +3,9 @@ import idaapi
 from idc import *
 from idaapi import *
 import idautils
+# from idadex import ea_t
 
+# from decorators import memoized
 import known_hashes
 
 '''
@@ -11,6 +13,7 @@ import known_hashes
 '''
 
 class EVMAsm(object):
+    reverse_table = {}
     ''' 
         EVM Instruction factory
         
@@ -58,25 +61,25 @@ class EVMAsm(object):
             Example use::
 
                 instruction = EVMAsm.assemble_one('PUSH1 0x10')
-                print 'Instruction: %s'% instruction
-                print '\tdescription:', instruction.description
-                print '\tgroup:', instruction.group
-                print '\taddress:', instruction.offset
-                print '\tsize:', instruction.size
-                print '\thas_operand:', instruction.has_operand
-                print '\toperand_size:', instruction.operand_size
-                print '\toperand:', instruction.operand
-                print '\tsemantics:', instruction.semantics
-                print '\tpops:', instruction.pops
-                print '\tpushes:', instruction.pushes
-                print '\tbytes:', '0x'+instruction.bytes.encode('hex')
-                print '\twrites to stack:', instruction.writes_to_stack
-                print '\treads from stack:', instruction.reads_from_stack
-                print '\twrites to memory:', instruction.writes_to_memory
-                print '\treads from memory:', instruction.reads_from_memory
-                print '\twrites to storage:', instruction.writes_to_storage
-                print '\treads from storage:', instruction.reads_from_storage
-                print '\tis terminator', instruction.is_terminator
+                print('Instruction: %s'% instruction)
+                print('\tdescription:', instruction.description)
+                print('\tgroup:', instruction.group)
+                print('\taddress:', instruction.offset)
+                print('\tsize:', instruction.size)
+                print('\thas_operand:', instruction.has_operand)
+                print('\toperand_size:', instruction.operand_size)
+                print('\toperand:', instruction.operand)
+                print('\tsemantics:', instruction.semantics)
+                print('\tpops:', instruction.pops)
+                print('\tpushes:', instruction.pushes)
+                print('\tbytes:', '0x'+instruction.bytes.encode('hex'))
+                print('\twrites to stack:', instruction.writes_to_stack)
+                print('\treads from stack:', instruction.reads_from_stack)
+                print('\twrites to memory:', instruction.writes_to_memory)
+                print('\treads from memory:', instruction.reads_from_memory)
+                print('\twrites to storage:', instruction.writes_to_storage)
+                print('\treads from storage:', instruction.reads_from_storage)
+                print('\tis terminator', instruction.is_terminator)
 
 
             '''
@@ -144,7 +147,7 @@ class EVMAsm(object):
                 operand = 0
                 for _ in range(self.operand_size):
                     operand <<= 8
-                    operand |= ord(next(buf))
+                    operand |= next(buf)
                 self._operand = operand
             except StopIteration:
                 raise Exception("Not enough data for decoding")
@@ -199,7 +202,7 @@ class EVMAsm(object):
             ''' Encoded instruction '''
             bytes = []
             bytes.append(chr(self._opcode))
-            for offset in reversed(xrange(self.operand_size)):
+            for offset in reversed(range(self.operand_size)):
                 c = (self.operand >> offset*8 ) & 0xff 
                 bytes.append(chr(c))
             return ''.join(bytes)
@@ -450,20 +453,36 @@ class EVMAsm(object):
                 0xff: ('SELFDESTRUCT', 0, 1, 0, 5000, 'Halt execution and register account for later deletion.')
             }
 
+    # @staticmethod
+    # # @memoized
+    # def _get_reverse_table():
+    #     ''' Build an internal table used in the assembler '''
+    #     reverse_table = {}
+    #     for (opcode, (name, immediate_operand_size, pops, pushes, gas, description)) in EVMAsm._table.items():
+    #         mnemonic = name
+    #         if name == 'PUSH':
+    #             mnemonic = '%s%d'%(name, (opcode&0x1f) + 1)
+    #         elif name in ('SWAP', 'LOG', 'DUP'):
+    #             mnemonic = '%s%d'%(name, (opcode&0xf) + 1)
+
+    #         reverse_table[mnemonic] = opcode, name, immediate_operand_size, pops, pushes, gas, description
+    #     return reverse_table
+
     @staticmethod
-    #@memoized
+    # @memoized
     def _get_reverse_table():
         ''' Build an internal table used in the assembler '''
-        reverse_table = {}
-        for (opcode, (name, immediate_operand_size, pops, pushes, gas, description)) in EVMAsm._table.items():
-            mnemonic = name
-            if name == 'PUSH':
-                mnemonic = '%s%d'%(name, (opcode&0x1f) + 1)
-            elif name in ('SWAP', 'LOG', 'DUP'):
-                mnemonic = '%s%d'%(name, (opcode&0xf) + 1)
+        if len(EVMAsm.reverse_table) == 0:
 
-            reverse_table[mnemonic] = opcode, name, immediate_operand_size, pops, pushes, gas, description
-        return reverse_table
+            for (opcode, (name, immediate_operand_size, pops, pushes, gas, description)) in EVMAsm._table.items():
+                mnemonic = name
+                if name == 'PUSH':
+                    mnemonic = '%s%d'%(name, (opcode&0x1f) + 1)
+                elif name in ('SWAP', 'LOG', 'DUP'):
+                    mnemonic = '%s%d'%(name, (opcode&0xf) + 1)
+
+                EVMAsm.reverse_table[mnemonic] = opcode, name, immediate_operand_size, pops, pushes, gas, description
+        return EVMAsm.reverse_table
 
     @staticmethod
     def assemble_one(assembler, offset=0):
@@ -475,7 +494,7 @@ class EVMAsm(object):
 
             Example use::
 
-                >>> print evm.EVMAsm.assemble_one('LT')
+                >>> print(evm.EVMAsm.assemble_one('LT'))
             
 
         '''
@@ -538,11 +557,11 @@ class EVMAsm(object):
 
             Example use::
             
-                >>> print EVMAsm.assemble_one('PUSH1 0x10')
+                >>> print(EVMAsm.assemble_one('PUSH1 0x10'))
 
         '''
         bytecode = iter(bytecode)
-        opcode = ord(next(bytecode))
+        opcode = next(bytecode)
         invalid = ('INVALID', 0, 0, 0, 0, 'Unknown opcode')
         name, operand_size, pops, pushes, gas, description = EVMAsm._table.get(opcode, invalid)
         instruction = EVMAsm.Instruction(opcode, name, operand_size, pops, pushes, gas, description, offset=offset)
@@ -563,7 +582,7 @@ class EVMAsm(object):
             Example use::
             
                 >>> for inst in EVMAsm.decode_all(bytecode):
-                ...    print inst
+                ...    print(inst)
 
                 ... 
                 PUSH1 0x60
@@ -699,7 +718,7 @@ class EVMProcessor(idaapi.processor_t):
     reg_names = ["SP"]
     assembler = {
         "header": [".evm"],
-        "flag": AS_NCHRE | ASH_HEXF0 | ASD_DECF0 | ASO_OCTF0 | ASB_BINF0 | AS_NOTAB,
+        "flag": AS_NCHRE | ASH_HEXF0 | ASD_DECF0 | ASO_OCTF0 | ASB_BINF0 | AS_ASCIIZ,
         "uflag": 0,
         "name": "evm assembler",
         "origin": ".org",
@@ -732,19 +751,108 @@ class EVMProcessor(idaapi.processor_t):
         "a_sizeof_fmt": "size %s",
     }
 
+    # dup, swap
+    def __trace_stop(self, insn, ret_pos):
+        # determine output, if static return, else None
+        if insn.get_canon_mnem().startswith("PUSH"):
+            jump_addr = self.get_operand(insn[0])
+        # elif insn.get_canon_mnem().startswith("PUSH"):
+        #     jump_addr = self.get_operand(insn[0])
+        else:
+            # print("__trace_stop else")
+            jump_addr = None
+        # print("__trace_stop end", insn.get_canon_mnem(), hex(self.get_operand(insn[0])), 'ret_pos =',ret_pos)
+        return jump_addr, ret_pos
+
+    def add_jump(self, from_ea, to_ea, jp_type):
+        add_cref(from_ea, to_ea, jp_type)
+        if to_ea not in self.dst2src:
+            self.dst2src[to_ea] = []
+        # print('add_jump', hex(from_ea), hex(to_ea))
+        if from_ea not in self.dst2src[to_ea]:
+            self.dst2src[to_ea].append(from_ea)
+    
+    def add_jumps(self, from_ea, to_ea_list, ret_pos_list, jp_type_list):
+        if len(to_ea_list) > 1: # note: currently in this case, to_ea_list is not the jump dst addr, but the uppderstream branchs
+            cmtstr = "cant determine, have multiple upperstream branchs: " + ' '.join([hex(ea).strip('L') for ea in to_ea_list])
+            ida_bytes.set_cmt(from_ea, cmtstr, True)
+        elif len(to_ea_list) == 1:
+            dst_addr = to_ea_list[0]
+            self.add_jump(from_ea, dst_addr, jp_type_list[0])
+            cmtstr = "JUMP TO: " + hex(dst_addr).strip('L')
+            ida_bytes.set_cmt(from_ea, cmtstr, True)
+        else:
+            return
+
+    def get_all_preceding_insn_on_controlflow(self, insn):
+        if insn.get_canon_mnem() == 'JUMPDEST' and True: #TODO: and previous insn is not reachable
+            if insn.ea in self.dst2src:
+                prev_insn_branchs = [idautils.DecodeInstruction(ea) for ea in self.dst2src[insn.ea]]
+            else:
+                prev_insn_branchs = [idautils.DecodePreviousInstruction(insn.ea)]
+        else:
+            prev_insn_branchs = [idautils.DecodePreviousInstruction(insn.ea)]
+        
+        return prev_insn_branchs
+
+    def trace_jumpdest(self, insn, current_stack_offset):
+        # if output == 0, keep trace, else stop
+
+        # prev_insn, fl = idautils.DecodePrecedingInstruction(insn.ea)
+        prev_insn_branchs = self.get_all_preceding_insn_on_controlflow(insn)
+        if len(prev_insn_branchs) > 1:
+            # print('multiple prev_insn_branchs:', [hex(ins.ea) for ins in prev_insn_branchs])
+            # prev_insn = None
+            # note: here the return[0] is not the jump dst addr, but the upperstream branchs
+            return [_i.ea for _i in prev_insn_branchs], [0]*len(prev_insn_branchs)
+        elif len(prev_insn_branchs) == 1:
+            prev_insn = prev_insn_branchs[0]
+            # print('in trace_jumpdest, cur insn:', hex(insn.ea), 'pre insn:', hex(prev_insn.ea) if prev_insn else None)
+        
+            _tbl = EVMAsm._get_reverse_table()
+            opname = prev_insn.get_canon_mnem()
+            info = _tbl[opname]
+            pops, pushes = info[3], info[4]
+
+            # print("trace_jumpdest", hex(prev_insn.ea), prev_insn.get_canon_mnem(), pops, pushes, current_stack_offset)
+            update_stack_offset = current_stack_offset - pops + pushes
+            assert current_stack_offset <=0, "current_stack_offset > 0, impossible, should be addressed in previous trace_jumpdest call"
+            if pushes > -current_stack_offset:
+                jump_addr, ret_pos = self.__trace_stop(prev_insn, -current_stack_offset)
+                if jump_addr is not None:
+                    return [jump_addr], [ret_pos]
+                else:
+                    return None, None
+            else:
+                return self.trace_jumpdest(prev_insn, update_stack_offset)
+        else:
+            return None, None
+            # TODO: implement stack modeling to resolve actual top value of stack
+
 
     def trace_sp(self, insn):
         pass
+        # pfn = get_func(insn.ea)
+        # if not pfn:
+        #     return
+        # mnemonic = insn.get_canon_mnem()
+        # if mnemonic == "PUSH2":
+        #     spofs = 2
+        #     self.add_auto_stkpnt(pfn, insn, -spofs)
+        # elif mnemonic == "MSTORE":
+        #     spofs = 2
+        #     self.add_auto_stkpnt(pfn, insn, -spofs)
 
     @staticmethod
     def get_prototype(num):
         hash_str = '0x%x' %(num, )
-        function_prototype = known_hashes.knownHashes.get(hash_str, '').encode('ascii','ignore')
+        function_prototype = known_hashes.knownHashes.get(hash_str, '')
         return function_prototype
 
     def notify_emu(self, insn):
+        # print("notify_emu", insn.ea)
         feature = insn.get_canon_feature()
-        #print "emulating", insn.get_canon_mnem(), hex(feature)
+        #print("emulating", insn.get_canon_mnem(), hex(feature))
 
         mnemonic = insn.get_canon_mnem()
         if mnemonic == "PUSH4":
@@ -773,27 +881,54 @@ class EVMProcessor(idaapi.processor_t):
             # add ref to next instruction for false branch
             add_cref(insn.ea, insn.ea + insn.size, fl_JN)
            
-            # maybe we have a simple puch
-            prev_insn = idautils.DecodePreviousInstruction(insn.ea)
-            if prev_insn:
-                if prev_insn.get_canon_mnem().startswith("PUSH"):
-                    jump_addr = self.get_operand(prev_insn[0])
-                    add_cref(insn.ea, jump_addr, fl_JN)
+            # # maybe we have a simple puch
+            # prev_insn = idautils.DecodePreviousInstruction(insn.ea)
+            # if prev_insn:
+            #     if prev_insn.get_canon_mnem().startswith("PUSH"):
+            #         jump_addr = self.get_operand(prev_insn[0])
+            #         add_cref(insn.ea, jump_addr, fl_JN)
+            jump_addr_list, ret_pos_list = self.trace_jumpdest(insn, 0)
+            if jump_addr_list is not None and len(jump_addr_list)>0:
+                # print('jump_addr_list', jump_addr_list)
+                # print(hex(insn.ea), [hex(ea) for ea in jump_addr_list], 'ret_pos:', ret_pos_list)
+                # print('+add_cref', hex(insn.ea), [hex(ea) for ea in jump_addr_list], 'ret_pos:', ret_pos_list)
+                #TODO: use ret_pos
+                self.add_jumps(insn.ea, jump_addr_list, ret_pos_list, [fl_JN]*len(jump_addr_list))
+            else:
+                # print('-not add cref')
+                pass
 
         elif mnemonic == "JUMP":
-            prev_insn = idautils.DecodePreviousInstruction(insn.ea)
-            if prev_insn:
-                # TODO: implement stack modeling to resolve actual top value of stack
-                if prev_insn.get_canon_mnem().startswith("PUSH"):
-                    jump_addr = self.get_operand(prev_insn[0])
-                    #print "found jump to", hex(jump_addr)
-                    add_cref(insn.ea, jump_addr, fl_JN)
+            jump_addr_list, ret_pos_list = self.trace_jumpdest(insn, 0)
+             # = rst[0], rst[1]
+            if jump_addr_list is not None and len(jump_addr_list)>0:
+                # print('jump_addr_list', jump_addr_list)
+                # print(hex(insn.ea), [hex(ea) for ea in jump_addr_list], 'ret_pos:', ret_pos_list)
+                # print('+add_cref', hex(insn.ea), [hex(ea) for ea in jump_addr_list], 'ret_pos:', ret_pos_list)
+                #TODO: use ret_pos
+                self.add_jumps(insn.ea, jump_addr_list, ret_pos_list, [fl_JN]*len(jump_addr_list))
+            else:
+                # print('-not add cref')
+                pass
+
+            # prev_insn = idautils.DecodePreviousInstruction(insn.ea)
+            # if prev_insn:
+            #     # TODO: implement stack modeling to resolve actual top value of stack
+            #     if prev_insn.get_canon_mnem().startswith("PUSH"):
+            #         jump_addr = self.get_operand(prev_insn[0])
+                    #print("found jump to", hex(jump_addr))
+                    # add_cref(insn.ea, jump_addr, fl_JN)
+                    # print("testxhyu")
+
                     # TODO: adjust function boundary to include all code
-                    #func = get_func(insn.ea)
-                    #if func:
-                    #    #print "appending new tail"
-                    #    #append_func_tail(func, jump_addr, BADADDR)
-                    #    #reanalyze_function(func)
+                    # func = get_func(insn.ea)
+                    # if func:  
+                    #    success = append_func_tail(func.start_ea, jump_addr, BADADDR)#BADADDR
+                    #    print("appending new tail", type(insn.ea), success)
+                    #    print('---', get_func_name(insn.ea), insn.ea, func.start_ea, jump_addr, BADADDR)
+                    #    print('insn.ea', insn.ea,  'insn.ip', insn.ip)
+                       # reanalyze_function(func)
+
 
         flows = (feature & CF_STOP) == 0
         if flows:
@@ -808,6 +943,7 @@ class EVMProcessor(idaapi.processor_t):
         return True
 
     def notify_func_bounds(self, code, func_ea, max_func_end_ea):
+        # print("notify_func_bounds", func_ea)
         """
         find_func_bounds() finished its work
         The module may fine tune the function bounds
@@ -817,8 +953,8 @@ class EVMProcessor(idaapi.processor_t):
           max_func_end_ea (from the kernel's point of view)
         returns: possible_return_code
         """
-        #print hex(func_ea), hex(max_func_end_ea), code
-        #print print_insn_mnem(max_func_end_ea-1)
+        #print(hex(func_ea), hex(max_func_end_ea), code)
+        #print(print_insn_mnem(max_func_end_ea-1))
         #append_func_tail(func, jump_addr, BADADDR)
         #reanalyze_function(func)
         return FIND_FUNC_OK
@@ -832,12 +968,13 @@ class EVMProcessor(idaapi.processor_t):
             
             for i in range(len(buf)):
                 operand <<= 8
-                operand |= ord(buf[i])
+                operand |= buf[i]
         elif op.type == o_near:
             operand = op.addr
         return operand
 
     def notify_out_operand(self, ctx, op):
+        # print("notify_out_operand", op)
         if op.type == o_idpspec0:
             operand = self.get_operand(op)
             ctx.out_line("0x%x" %(operand, ))
@@ -863,19 +1000,20 @@ class EVMProcessor(idaapi.processor_t):
 
 
     def notify_ana(self, insn):
+        # print("notify_ana", insn.ea)
         ea = insn.ea
         bytes_left = chunk_start(ea) + chunk_size(ea) - ea
         bytecode = ida_bytes.get_bytes(insn.ea, bytes_left) # get remaining bytes in chunk
         try:
             instruction = EVMAsm.disassemble_one(bytecode)
         except Exception as e:
-            print e
+            print(e)
             return
 
         insn.size = instruction.size
 
         #initialize operands to voids
-        operands = [insn[i] for i in xrange(1, 6)]
+        operands = [insn[i] for i in range(1, 6)]
         for o in operands:
             o.type = o_void
 
@@ -893,9 +1031,9 @@ class EVMProcessor(idaapi.processor_t):
 
             # sanity check previous instructions
             for i in prev_insns:
-                #print i.get_canon_mnem(),
+                #print(i.get_canon_mnem(),)
                 if i.ea == ida_idaapi.BADADDR:
-                    print 'ERROR'
+                    print('ERROR')
 
             if (prev_insns[0].get_canon_mnem().startswith("PUSH2") and
                     prev_insns[1].get_canon_mnem().startswith("EQ") and
@@ -928,10 +1066,11 @@ class EVMProcessor(idaapi.processor_t):
 
 
     def notify_assemble(self, ea, cs, ip, use32, line):
+        # print("notify_assemble", ea)
         try:
             asm = EVMAsm.assemble_one(line, 0)
         except Exception as e:
-            print "Error trying to assemble '%s': %s" %(line, e)
+            print("Error trying to assemble '%s': %s" %(line, e))
             return None
 
         return asm.bytes
@@ -955,7 +1094,7 @@ class EVMProcessor(idaapi.processor_t):
         self.instruc.append({'name':"CALLI", 'feature':CF_USE2|CF_STOP|CF_CALL}) # pseudo instruction 
         self.instruction_index[0x101] = 1
         i = len(self.instruc)
-        for (mnemonic, info) in EVMAsm._get_reverse_table().iteritems(): #_table.iteritems():
+        for (mnemonic, info) in iter(EVMAsm._get_reverse_table().items()): #iter(_table.items()):
             features = 0 # initially zero
 
             if info[2] != 0: # has immediate
@@ -975,8 +1114,44 @@ class EVMProcessor(idaapi.processor_t):
             i += 1
 
         self.instruc_end = len(self.instruc)
+        self.has_rebuild_cf = False
+        self.dst2src = {}
+    # def notify_init(self, func):
+    #     print("notify_init test")
 
+    # def notify_auto_queue_empty(self, func):
+    #     print("notify_auto_queue_empty test")
+    #     rst = idc.auto_wait()
+    #     print('wait ret', rst )
+    #     if rst:
+    #         print("++++notify_auto_queue_empty test")
+    #     else:
+    #         print("----notify_auto_queue_empty test")
+
+    # def notify_coagulate(self, start_ea):
+    #     print("notify_coagulate", start_ea)
+
+    def notify_out_header(self, outctx):
+        # print("notify_out_header")
+        idc.auto_wait()
+        self.rebuild_cf()
+
+    def rebuild_cf(self):
+        if self.has_rebuild_cf:
+            return
+        self.has_rebuild_cf = True
+        for func_ea in idautils.Functions():
+            #0x8d715d9d
+            print('rebuild_cf func_ea', func_ea,get_func(func_ea),idc.get_func_name(func_ea))
+            reanalyze_function(get_func(func_ea))
 
 
 def PROCESSOR_ENTRY():
     return EVMProcessor()
+
+
+
+# print("rebuild_cf before wait")
+# idc.auto_wait()
+# print("rebuild_cf after wait")
+# rebuild_cf()
